@@ -1,0 +1,377 @@
+---
+title: "Nigeria_Africa_Intra-Trade_Analysis"
+author: ""
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+To boost trade among African countries, regional economic communities (RECs), such as ECOWAS, have been created over the last few decades. Trade among African countries only accounts for about 10 per cent of their total external trade according to UN.org report.
+
+The challenges of improving such low levels of intra-African trade are immense, but policymakers on the continent are increasingly focusing on them as a new wave of interest in regional integration gains momentum.
+
+This descriptive report analysis task therefore, is to examine the Nigeria intra-Africa trade connectedness for the year 2019.
+
+```{r, some_chunk, results = 'hide'}
+#load the libraries
+library(tidyverse)
+library(janitor)
+```
+
+```{r}
+#load the data set into R
+commerce1 <- read.csv("D:/DDrive - Document/R_Tutoria_365/nigeria_intra_Africa_trade_connectedness.csv")
+head(commerce1) # view first few rows of the data set 
+```
+
+Let's explore the structure and dimensions of the data set
+
+```{r}
+dim(commerce1)
+str(commerce1) 
+summary(commerce1) #summary(base) gives a summary information about each of the columns highlighting missing values per column and calculates the summary statistics of the numeric columns
+```
+
+Exploring the data further confirms Nigeria is the only exporting country. This also helps us identify the relevant and non relevant columns.
+
+```{r}
+unique(commerce1$exporting_country) #Nigeria is the only exporting country 
+unique(commerce1$exporting_region)
+unique(commerce1$exporting_recs)
+unique(commerce1$exporting_gdp_per_capita)
+unique(commerce1$exporting_gdp)
+```
+
+Having seen that the above columns provides only one data value about Nigeria, it will be removed, along with other columns that are not needed for this report
+
+```{r}
+commerce_cols_cl <- commerce1 %>% 
+  select(-c(exporting_country_iso,importing_country_iso, commodity_index, commodities_code,export_value,
+            exporting_country,exporting_gdp,exporting_gdp_per_capita, exporting_recs,exporting_region, year))
+```
+
+Check irrelevant columns have been removed.
+
+```{r}
+names(commerce_cols_cl) 
+```
+
+Next is to deal with missing value. Since this data is about understanding the intra trade activities of Nigeria with other countries in the continent, it is better to remove rows of country where the trade value is missing and NAs in the Scale Sci column.
+
+```{r}
+commerce_NA_cl <- commerce_cols_cl %>% 
+  filter(!is.na(trade_value) & !is.na(scaled_sci) )
+summary(commerce_NA_cl) #check to see the cleaned data set
+```
+
+Next in cleaning this data is to rename countries with miss spelt names
+
+```{r}
+unique_country_names<- unique(commerce_NA_cl$importing_country) # extract the country names to identify wrong names
+unique_country_names
+
+commerce_NA_cl <- commerce_NA_cl %>% 
+  mutate(importing_country = recode(importing_country,
+                          "C?te d?Ivoire" = "Côte d'Ivoire",
+                          "S?o Tom? & Pr?ncipe" = "Sao Tome and Principe")
+         )
+commerce_NA_cl <- commerce_NA_cl %>% # 1 country did not correct,because of special character "?" , 
+#using the gsub function to rename country below
+  mutate(importing_country = gsub("S\\?o Tom\\? & Pr\\?ncipe", "Sao Tome and Principe", importing_country))
+```
+
+```{r}
+unique(commerce_NA_cl$importing_country) # check that the names are now correct
+```
+```{r}
+commerce_NA_cl[which.max(commerce_NA_cl$trade_value),]
+```
+Nigeria exported a total of 998 commodities in the year 2019. The commodity with the maximum traded value is Cobalt, value at N4,042,239,315. This was traded with Ghana. 
+
+```{r}
+#get the minimum and max trade value rowwise to see full column details about that country
+commerce_NA_cl[which.min(commerce_NA_cl$trade_value),]
+```
+The same product was least traded with Ethiopia, at a paltry amount of N33,535.
+
+
+## Regional and Economic Community Analysis
+Analyzing trade patterns by region and economic communities, lets organize country by trade value in desc order and then summarize the data by importing country.
+
+```{r}
+trade_by_importingC <- commerce_NA_cl %>% 
+  group_by(importing_country) %>% 
+  summarise(total_trade_value = sum(trade_value)) %>% 
+  arrange(desc(total_trade_value))
+head(trade_by_importingC)
+```
+
+```{r}
+#get the percentage of the each country over total trade
+trade_by_importingC2 <- trade_by_importingC %>% 
+  mutate(percentage = round(total_trade_value/sum(total_trade_value)*100,1))
+head(trade_by_importingC2)
+```
+
+```{r}
+#sum the total % share of the 10 importing countries
+sum(trade_by_importingC2$percentage[1:10])
+```
+```{r}
+#visualize the data
+plot_importingC <- ggplot(trade_by_importingC, aes(x = reorder(importing_country, total_trade_value), y = total_trade_value))+
+  geom_bar(stat = "identity", fill ="steelblue") +
+  coord_flip()+
+  ggtitle("Total Trade Value by Importing Country")+
+  xlab("Importing Country")+
+  ylab("Total Trade Value")+
+  theme_classic()
+plot_importingC
+```
+
+The above graph shows Ghana is the highest importing country from Nigeria
+  
+   
+```{r}
+# For clearer visual, lets look at the top 10 importing country
+top_10_importing_country <- trade_by_importingC %>% 
+  top_n(10, wt = total_trade_value)
+head(top_10_importing_country)
+```
+```{r}
+# Lets add the % of trade each for each country within the top10 group
+top_10_importing_country <- top_10_importing_country %>% 
+  mutate(percentage = total_trade_value/sum(total_trade_value)*100)
+View(top_10_importing_country)
+sum(top_10_importing_country$percentage)
+```
+Visualize the data 
+```{R}
+plot_top10_C <- ggplot(top_10_importing_country, aes(x = reorder(importing_country, total_trade_value), y = total_trade_value, fill = importing_country)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 1), 
+            size = 3, 
+            color = "black") +
+  coord_flip() +
+  ggtitle("Top 10 Total Trade Value by Importing Country") +
+  xlab("Importing Country") +
+  ylab("Total Trade Value") +
+  scale_fill_brewer(palette = "Set3") +  # Adjust color palette if needed
+  theme_minimal(base_size = 10) +  # Set base font size for better readability
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 10, face = "bold", hjust = 1),  # Center align title
+        legend.position = "right",  # Move legend to the right
+        legend.title = element_blank(),  # Remove legend title
+        legend.text = element_text(size = 8),  # Adjust legend text size
+        plot.margin = margin(0.1, 0.1, 0.1, 0.1, "cm"))  # Add some padding around the plot
+
+plot_top10_C
+```
+
+The plot above reveals that the top 10 importing country made up 98.8% of the total export trading activity of Nigeria in 2019.  Ghana topped the list (35.2%), followed by South Africa (32.3%)
+
+```{r}
+#For clearer visual, lets also get the bottom10 importing countries
+bottom_10_importing_country <- trade_by_importingC %>% 
+  slice_min(order_by = total_trade_value, n = 10)
+view(bottom_10_importing_country)
+```
+```{r}
+# Lets add the % of trade each for each country within the bottom10 group
+bottom_10_ICbypercent <- bottom_10_importing_country %>% 
+  mutate(percentage = round(total_trade_value/sum(total_trade_value)*100,1))
+view(bottom_10_ICbypercent)
+```
+Inversely, below graph shows the bottom 10 countries Nigeria traded with. Ethiopia and Uganda made the top bottom at 4.2% and 4.6% traded value respectively.
+```{r}
+#visualize the bottom_10 importing countries
+plot_bottom10_C <- ggplot(bottom_10_ICbypercent, aes(x = reorder(importing_country, total_trade_value), y = total_trade_value, fill = importing_country)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 1), 
+            size = 3, 
+            color = "black") +
+  coord_flip() +
+  ggtitle("Bottom_10 Trade Value by Importing Country") +
+  xlab("Importing Country") +
+  ylab("Total Trade Value") +
+  #scale_fill_brewer(palette = "Set3") +  # Adjust color palette if needed
+  theme_minimal(base_size = 10) +  # Set base font size for better readability
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 10, face = "bold", hjust = 1),  # Center align title
+        legend.position = "right",  # Move legend to the right
+        legend.title = element_blank(),  # Remove legend title
+        legend.text = element_text(size = 8),  # Adjust legend text size
+        plot.margin = margin(0.1, 0.1, 0.1, 0.1, "cm"))  # Add some padding around the plot
+
+plot_bottom10_C
+```
+
+```{r}
+# Trade values by importing region
+trade_by_importing_region <- commerce_NA_cl %>% 
+  group_by(importing_region) %>% 
+  summarize(total_trade_value = sum(trade_value))
+view(trade_by_importing_region)
+```
+```{r}
+#get the % of the share of the region 
+trade_by_importing_region <- trade_by_importing_region %>% 
+  mutate(percentage = round(total_trade_value/sum(total_trade_value)*100,1))
+view(trade_by_importing_region)
+```
+```{r}
+#visualize the data
+TV_by_ImportingR <- ggplot(trade_by_importing_region, aes(x = reorder(importing_region, total_trade_value), y = total_trade_value, fill = importing_region)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+            position = position_stack(vjust = 1), 
+            size = 3, 
+            color = "black") +
+  coord_flip() +
+  ggtitle("Total Trade Value by Importing Region") +
+  xlab("Importing Region") +
+  ylab("Total Trade Value") +
+  scale_fill_brewer(palette = "Set3") +  # Adjust color palette if needed
+  theme_minimal(base_size = 10) +  # Set base font size for better readability
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 10, face = "bold", hjust = 1),  # Center align title
+        legend.position = "right",  # Move legend to the right
+        legend.title = element_blank(),  # Remove legend title
+        legend.text = element_text(size = 8),  # Adjust legend text size
+        plot.margin = margin(0.1, 0.1, 0.1, 0.1, "cm"))  # Add some padding around the plot
+
+TV_by_ImportingR
+```
+```{r}
+# Analyse trade by the importing RECs
+#summarize by importing recs
+trade_by_importing_recs <- commerce_NA_cl %>% 
+  group_by(importing_recs) %>% 
+  summarize(total_trade_value = sum(trade_value))
+view(trade_by_importing_recs)
+```
+```{r}
+#get the % share of each recs over total trade value
+Importing_recsPerc <- trade_by_importing_recs %>% 
+  mutate(percentage = round(total_trade_value/sum(total_trade_value)*100,1)) %>% 
+arrange(desc(percentage))
+view(Importing_recsPerc)
+```
+```{r}
+#get top recs for, slice and sum
+sum(Importing_recsPerc$percentage[1:4]) # the top 4 recs makes up 99.5% of the trade. 
+top_4_importing_recs <- Importing_recsPerc %>% 
+  top_n(4, wt = total_trade_value)
+View(top_4_importing_recs)
+```
+```{r}
+#visualize the data
+  TV_by_ImportingRec <- ggplot(top_4_importing_recs, aes(x = reorder(importing_recs, total_trade_value), y = total_trade_value, fill = importing_recs)) +
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = paste0(round(percentage, 1), "%")), 
+              position = position_stack(vjust = 1), 
+              size = 3, 
+              color = "black") +
+    coord_flip() +
+    ggtitle("Total Trade Value by Importing Recs") +
+    xlab("Importing Recs") +
+    ylab("Total Trade Value") +
+    scale_fill_brewer(palette = "Set3") +  # Adjust color palette if needed
+    theme_minimal(base_size = 10) +  # Set base font size for better readability
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(size = 10, face = "bold", hjust = 1),  # Center align title
+          legend.position = "right",  # Move legend to the right
+          legend.title = element_blank(),  # Remove legend title
+          legend.text = element_text(size = 8),  # Adjust legend text size
+          plot.margin = margin(0.1, 0.1, 0.1, 0.1, "cm"))  # Add some padding around the plot
+  
+TV_by_ImportingRec
+```
+Looking further into which segments of the regions Nigeria traded with the most, we can see from graphs two graphs above that, Nigeria traded most within its sub region, Western Africa at 55% of the total export value, which translated to its Regional Economic Communities (REC) leading at same 55%. South Africa comes second at 36.9% and Central Africa at the third place at 7.8%. Its REC counterpart follows same pattern.
+
+
+## Distance and Connectivity Analysis
+Lets now analyze the impact of distance and connectivity on trade values.
+
+```{r}
+#Trade value vs distance to capital
+TV_by_distcap <- ggplot(commerce_NA_cl, aes(x = distcap, y = trade_value)) + 
+  geom_point(alpha = 0.5) + 
+  geom_smooth(method = "lm")+
+  ggtitle("Trade Value vs Distance to Capital") + 
+  labs(x= "Distance to Capital", y ="Trade Value")+
+  theme_classic()
+ TV_by_distcap # this represent distance to the country's capital
+```
+As seen above, there is negative correlation between distance to capital and its impact on the trading activity with Nigeria. The longer the distance, the lesser the trade value except for South Africa which is an outlier to this trend.
+
+```{r}
+#Trade value vs distance to country
+TV_by_dist <- ggplot(commerce_NA_cl, aes(x = dist, y = trade_value)) + 
+  geom_point(alpha = 0.5) + 
+  geom_smooth(method = "lm")+
+  ggtitle("Trade Value vs Distance To Country") + 
+  labs(x= "Distance to Country", y ="Trade Value")+
+  theme_gray()
+TV_by_dist # this represent distance to the country, not necessarily the capital
+```
+
+Graph reveals same result as distance to country capital. There is negative correlation here also. The longer the distance, the lesser the trade value except for SA.
+
+
+## Cultural and Historical Ties
+Here we are examining the ties between cultural and historical relationship's impact on trade value
+
+```{r}
+# Impact of common language on trade value
+TV_by_ComLag <- ggplot(commerce_NA_cl, aes(x = factor(comlang_off), fill= trade_value)) + 
+  geom_bar() + ggtitle("Trade Value vs Common Language") +
+  xlab("Common Language (0 = No, 1 = Yes)") + ylab("Trade Value")+
+  theme_light()
+ TV_by_ComLag 
+```
+The plot above shows that common language does not affect Nigeria's trading relation with other countries within the region. As shown through the graph, there were more trade relations with countries with no common language than the ones with common language.
+
+
+```{r}
+# Impact of colonial ties on trade value
+TV_by_ColMaster <- ggplot(commerce_NA_cl, aes(x = factor(comcol), y = trade_value)) +
+  geom_boxplot() + ggtitle("Trade Value vs Colonial Ties") + 
+  xlab("Colonial Ties (0 = No, 1 = Yes)") + ylab("Trade Value")+
+  theme_bw()
+TV_by_ColMaster # this reveals that colonial master ties does not impact Nigeria's 
+                #trading relation with other countries that were not colonized by same master
+```
+Similarly, we can see from above graph, that  colonial master ties have no effect on the trading relationship Nigeria has with countries within the region. There are more trades with countries without colonial master ties
+
+
+## Economic Indicators
+We are analyzing here the relationship between trade values and economic indicators like GDP and GDP per capita.
+
+```{r}
+# Trade value vs importing GDP
+TV_by_GDP <- ggplot(commerce_NA_cl, aes(x = importing_gdp, y = trade_value)) + 
+  geom_point(alpha = 0.5) + 
+  geom_smooth(method = "lm") +
+  ggtitle("Trade Value vs Importing Country's GDP") + 
+  xlab("Importing GDP") + ylab("Trade Value")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 10, face = "bold", hjust = 1))
+  
+TV_by_GDP # this shows a positive correlation btw the trade value and the countries GDP. 
+#The higher the GDP, the higher the value of export from Nigeria
+```
+```{r}
+# Trade value vs importing GDP per capita
+TV_by_GDPerCapita <- ggplot(commerce_NA_cl, aes(x = importing_gdp_per_capita, y = trade_value)) + 
+  geom_point(alpha = 0.5) + geom_smooth(method = "lm") + 
+  ggtitle("Trade Value vs Importing GDP per Capita") +
+  xlab("Importing GDP per Capita") + ylab("Trade Value")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 10, face = "bold", hjust = 1))
+TV_by_GDPerCapita
+```
+As we can from both graphs  above, that there is a positive correlation between the trade value and the countries GDP. The higher the GDP, the higher the value of export from Nigeria to those countries. This implies the importing countries have a higher purchasing power to place demands of products from Nigeria
+
+To see the full report, see the full [documentation](https://docs.google.com/document/d/11MPApnGaqU6qQGuZ9g5SPJVvPP5Y5tY80lpCIO7EiJ8/edit?usp=sharing)
